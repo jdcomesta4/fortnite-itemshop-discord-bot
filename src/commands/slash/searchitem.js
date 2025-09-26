@@ -72,7 +72,7 @@ module.exports = {
                     .setDescription(`No items found matching **${searchName}**${searchType ? ` (${searchType})` : ''}${searchRarity ? ` (${searchRarity} rarity)` : ''}`)
                     .setColor(0xFF6B6B)
                     .setTimestamp()
-                    .setFooter({ text: 'JD' });
+                    .setFooter({ text: 'JD', iconURL: null });
                 
                 await interaction.editReply({ embeds: [noResultsEmbed] });
                 
@@ -96,7 +96,7 @@ module.exports = {
                     .setDescription(`No items found matching **${searchName}** with **${searchRarity}** rarity${searchType ? ` (${searchType})` : ''}`)
                     .setColor(0xFF6B6B)
                     .setTimestamp()
-                    .setFooter({ text: 'JD' });
+                    .setFooter({ text: 'JD', iconURL: null });
                 
                 await interaction.editReply({ embeds: [noResultsEmbed] });
                 
@@ -119,7 +119,7 @@ module.exports = {
                     ])
                     .setColor(0xFFB347)
                     .setTimestamp()
-                    .setFooter({ text: 'JD' });
+                    .setFooter({ text: 'JD', iconURL: null });
                 
                 await interaction.editReply({ embeds: [tooManyEmbed] });
                 
@@ -173,7 +173,7 @@ async function createDetailedItemEmbed(item, shopStatus = null) {
         .setTitle(`🔍 ${item.name}`)
         .setColor(apiClient.getRarityColor(item.rarity))
         .setTimestamp()
-        .setFooter({ text: 'JD' });
+        .setFooter({ text: 'JD', iconURL: null });
     
     // Description
     if (item.description) {

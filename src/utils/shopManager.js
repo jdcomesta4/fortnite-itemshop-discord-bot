@@ -132,7 +132,7 @@ class ShopManager {
             .setColor(0x00AE86)
             .setTimestamp()
             .setFooter({ 
-                text: '', 
+                text: 'JD', 
                 iconURL: 'https://fnbr.co/favicon.ico' 
             });
 
@@ -568,7 +568,7 @@ class ShopManager {
             .setDescription(message)
             .setColor(0xFF0000)
             .setTimestamp()
-            .setFooter({ text: 'JD' });
+            .setFooter({ text: 'JD', iconURL: null });
     }
 
     async postDailyShop(client) {
