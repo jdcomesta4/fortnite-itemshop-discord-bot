@@ -1,5 +1,6 @@
-CREATE DATABASE IF NOT EXISTS fortnite_shop_bot;
-USE fortnite_shop_bot;
+-- CREATE DATABASE IF NOT EXISTS your_database_name;
+-- USE your_database_name;
+-- Note: Replace 'your_database_name' with the value from your DB_NAME environment variable
 
 -- Command usage tracking
 CREATE TABLE IF NOT EXISTS command_usage (
@@ -97,4 +98,18 @@ CREATE TABLE IF NOT EXISTS search_analytics (
     INDEX idx_search_query (search_query),
     INDEX idx_timestamp (timestamp),
     INDEX idx_user_id (user_id)
+);
+
+-- Guild configurations
+CREATE TABLE IF NOT EXISTS guild_configs (
+    guild_id VARCHAR(20) PRIMARY KEY,
+    guild_name VARCHAR(100),
+    shop_channel_id VARCHAR(20),
+    daily_updates_enabled BOOLEAN DEFAULT TRUE,
+    trusted_role_id VARCHAR(20),
+    configured_by VARCHAR(20),
+    configured_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    last_updated DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_shop_channel_id (shop_channel_id),
+    INDEX idx_configured_at (configured_at)
 );

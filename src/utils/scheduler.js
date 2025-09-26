@@ -52,7 +52,7 @@ class Scheduler {
 
             this.isInitialized = true;
             logger.info('Scheduler initialized with 3 jobs:');
-            logger.info('• Daily shop posting: 01:30 UTC (02:30 CET)');
+            logger.info('• Daily shop posting: 01:30 UTC');
             logger.info('• Cache cleanup: Every 6 hours');
             logger.info('• Database maintenance: Sundays at 02:00 UTC');
 

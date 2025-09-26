@@ -1,4 +1,4 @@
-const { Events } = require('discord.js');
+const { Events, ActivityType } = require('discord.js');
 const logger = require('../utils/logger');
 const commandHandler = require('../handlers/commandHandler');
 
@@ -13,8 +13,10 @@ module.exports = {
             // Register slash commands
             await commandHandler.registerSlashCommands(client);
             
-            // Set bot activity
-            client.user.setActivity('Fortnite Item Shop | jd!help', { type: 'WATCHING' });
+            // Set bot activity - using Custom to display exactly what we want
+            client.user.setActivity("use code 'sheready' in the itemshop", { type: ActivityType.Custom });
+            
+            logger.info("Bot status set to: use code 'sheready' in the itemshop");
             
             logger.info('Bot initialization completed successfully');
             

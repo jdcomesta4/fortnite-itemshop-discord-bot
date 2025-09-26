@@ -69,8 +69,10 @@ class ErrorHandler {
         try {
             const errorMessage = '❌ An unexpected error occurred while executing this command. The issue has been logged and will be investigated.';
             
-            if (interaction?.deferred || interaction?.replied) {
+            if (interaction?.replied) {
                 await interaction.followUp({ content: errorMessage, ephemeral: true });
+            } else if (interaction?.deferred) {
+                await interaction.editReply({ content: errorMessage });
             } else {
                 await interaction.reply({ content: errorMessage, ephemeral: true });
             }

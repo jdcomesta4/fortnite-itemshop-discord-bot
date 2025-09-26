@@ -96,20 +96,7 @@ module.exports = {
 };
 
 async function checkPermissions(message) {
-    const trustedRoleId = process.env.TRUSTED_ROLE_ID;
-    
-    if (!trustedRoleId) {
-        logger.warn('No trusted role ID configured, allowing all users');
-        return true;
-    }
-    
-    const member = message.guild.members.cache.get(message.author.id) || 
-                  await message.guild.members.fetch(message.author.id).catch(() => null);
-    
-    if (!member) {
-        logger.warn(`Could not fetch member: ${message.author.id}`);
-        return false;
-    }
-    
-    return member.roles.cache.has(trustedRoleId) || member.permissions.has('Administrator');
+    // Allow all users to use prefix commands
+    // Admin-specific commands would need to be handled individually if added as prefix commands
+    return true;
 }

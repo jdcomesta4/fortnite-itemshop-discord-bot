@@ -1,42 +1,54 @@
-# Fortnite Item Shop Discord Bot
+# 🛍️ Fortnite Item Shop Discord Bot
 
-A comprehensive Discord bot built with Discord.js v14+ that displays Fortnite item shop data with advanced pagination, search functionality, and analytics. Integrates with the FNBR.co API to provide real-time shop information.
+A comprehensive Discord bot that displays the current Fortnite item shop with advanced features including daily updates, item search, and permission management.
 
-## Features
+![Discord.js](https://img.shields.io/badge/discord.js-v14.14.1-blue.svg)
+![Node.js](https://img.shields.io/badge/node.js-%3E%3D18.0.0-green.svg)
+![License](https://img.shields.io/badge/license-MIT-blue.svg)
 
-- 🛍️ **Daily Item Shop Display** - Automatically posts the current item shop at 1:30 AM UTC+1
-- 🔍 **Advanced Item Search** - Search for items by name, type, and rarity with smart filtering
-- 📱 **Interactive Navigation** - Paginated embeds with intuitive button controls
-- 🎯 **Role-Based Permissions** - Restrict commands to trusted users
-- 📊 **Comprehensive Analytics** - Track usage, errors, and performance metrics
-- ⚡ **Smart Caching** - Efficient API usage with intelligent cache management
-- 🔄 **Auto-Retry Logic** - Robust error handling with exponential backoff
-- 📝 **Detailed Logging** - Complete audit trail of all bot activities
+## ✨ Features
 
-## Commands
+- **📅 Daily Shop Updates**: Automatically posts the current Fortnite item shop to designated channels
+- **🔍 Item Search**: Search for specific items by name, type, or rarity
+- **🎯 Interactive Navigation**: Browse through shop sections with reaction buttons
+- **👮 Permission Management**: Role-based access control for shop commands
+- **📊 Analytics & Logging**: Comprehensive tracking of command usage and shop history
+- **⚡ Error Handling**: Robust error management with detailed logging
+- **🔄 Auto Retry**: Automatic retry logic for API requests
+- **💾 Database Storage**: MySQL database for configuration and analytics
 
-### Slash Commands
-- `/showcurrentitemshop` - Display the current Fortnite item shop
-- `/searchitem <name> [type] [rarity]` - Search for specific items
+## 🚀 Commands
+
+### User Commands
+- `/showcurrentitemshop` - Display the current Fortnite item shop with navigation
+- `/searchitem <name>` - Search for specific items by name, type, or rarity
+- `/help` - Display help information and available commands
+
+### Admin Commands
+- `/setshopchannel <channel>` - Set up daily shop updates for a channel
+- `/shopsettings` - Manage shop channel settings
+- `/shopsettings view` - View current server configuration
+- `/shopsettings toggle <true/false>` - Toggle daily updates on/off
+- `/shopsettings trustedrole <role>` - Set trusted role for shop commands
+- `/shopsettings remove` - Remove shop configuration
+- `/botstatus` - View bot status and statistics
 
 ### Prefix Commands
-- `jd!showcurrentitemshop` - Display the current Fortnite item shop
-- `jd!searchitem <name> [type] [rarity]` - Search for specific items
+All slash commands are also available as prefix commands for flexibility.
 
-## Installation
+## 📋 Prerequisites
 
-### Prerequisites
 - Node.js 18.0.0 or higher
-- MySQL 5.7+ or MariaDB 10.3+
-- Discord Bot Token
-- FNBR.co API Key
+- MySQL database
+- Discord bot token
+- FNBR.co API key
 
-### Setup
+## 🛠️ Installation
 
 1. **Clone the repository**
    ```bash
-   git clone <repository-url>
-   cd item_shop
+   git clone https://github.com/jdcomesta4/fortnite-itemshop-discord-bot.git
+   cd fortnite-itemshop-discord-bot
    ```
 
 2. **Install dependencies**
@@ -44,223 +56,198 @@ A comprehensive Discord bot built with Discord.js v14+ that displays Fortnite it
    npm install
    ```
 
-3. **Database Setup**
-   ```bash
-   # Create MySQL database and import schema
-   mysql -u root -p < src/config/database.sql
-   ```
-
-4. **Environment Configuration**
-   ```bash
-   # Copy example environment file
-   cp .env.example .env
+3. **Set up environment variables**
    
-   # Edit .env with your credentials
+   Create a `.env` file in the root directory:
+   ```env
+   # Discord Bot Configuration
    DISCORD_TOKEN=your_discord_bot_token
-   FNBR_API_KEY=your_fnbr_api_key
-   PREFIX=jd!
-   TRUSTED_ROLE_ID=your_trusted_role_id
-   SHOP_CHANNEL_ID=your_shop_channel_id
+   CLIENT_ID=your_bot_client_id
+   
+   # Database Configuration
    DB_HOST=localhost
-   DB_USER=your_db_user
-   DB_PASSWORD=your_db_password
-   DB_NAME=your_db_name
+   DB_USER=your_database_user
+   DB_PASSWORD=your_database_password
+   DB_NAME=your_database_name
+   DB_PORT=3306
+   
+   # API Configuration
+   FNBR_API_KEY=your_fnbr_api_key
+   
+   # Optional: Logging Configuration
+   LOG_LEVEL=info
    ```
 
-5. **Start the bot**
-   ```bash
-   # Development
-   npm run dev
+4. **Set up the database**
    
-   # Production
+   Import the database schema:
+   ```bash
+   mysql -u your_username -p your_database_name < src/config/database.sql
+   ```
+
+5. **Deploy slash commands**
+   ```bash
+   node deploy-commands.js
+   ```
+
+6. **Start the bot**
+   ```bash
    npm start
    ```
 
-## Configuration
+   For development with auto-restart:
+   ```bash
+   npm run dev
+   ```
 
-### Environment Variables
+## 🔧 Configuration
 
-| Variable | Description | Required |
-|----------|-------------|----------|
-| `DISCORD_TOKEN` | Your Discord bot token | ✅ |
-| `FNBR_API_KEY` | FNBR.co API key for item data | ✅ |
-| `PREFIX` | Command prefix (default: jd!) | ✅ |
-| `TRUSTED_ROLE_ID` | Role ID for command permissions | ✅ |
-| `SHOP_CHANNEL_ID` | Channel for daily shop posts | ✅ |
-| `DB_HOST` | MySQL host | ✅ |
-| `DB_USER` | MySQL username | ✅ |
-| `DB_PASSWORD` | MySQL password | ✅ |
-| `DB_NAME` | MySQL database name | ✅ |
-| `DB_PORT` | MySQL port (default: 3306) | ❌ |
+### Discord Bot Setup
 
-### Bot Permissions
+1. Go to the [Discord Developer Portal](https://discord.com/developers/applications)
+2. Create a new application and bot
+3. Copy the bot token and client ID to your `.env` file
+4. Enable the following bot permissions:
+   - Send Messages
+   - Use Slash Commands
+   - Embed Links
+   - Add Reactions
+   - Read Message History
+   - Manage Messages (for navigation)
 
-The bot requires the following Discord permissions:
-- Send Messages
-- Embed Links
-- Read Message History
-- Use Slash Commands
-- Add Reactions (for pagination)
+### FNBR.co API Setup
 
-## Architecture
+1. Visit [FNBR.co](https://fnbr.co/api/docs) to get an API key
+2. Add your API key to the `.env` file
+
+### Fortnite API Setup
+
+1. Vist [Fortnite-API](https://fortnite-api.com/) to get an API key
+2. Add your API key to the `.env` file
+
+### Database Setup
+
+The bot uses MySQL to store:
+- Server configurations
+- Command usage analytics
+- Shop history
+- Error logs
+- User statistics
+
+## 📂 Project Structure
 
 ```
-src/
-├── commands/
-│   ├── slash/           # Slash command implementations
-│   └── prefix/          # Prefix command implementations
-├── handlers/
-│   ├── commandHandler.js # Command loading and registration
-│   ├── eventHandler.js   # Event loading
-│   └── errorHandler.js   # Centralized error handling
-├── events/
-│   ├── ready.js         # Bot ready event
-│   ├── interactionCreate.js # Slash commands & buttons
-│   └── messageCreate.js # Prefix commands
-├── utils/
-│   ├── shopManager.js   # Shop display and pagination
-│   ├── apiClient.js     # FNBR.co API integration
-│   ├── database.js      # MySQL operations
-│   ├── logger.js        # Winston logging
-│   └── scheduler.js     # Cron job management
-├── config/
-│   └── database.sql     # Database schema
-└── index.js            # Main entry point
+├── src/
+│   ├── commands/
+│   │   ├── prefix/          # Prefix-based commands
+│   │   └── slash/           # Slash commands
+│   ├── config/
+│   │   └── database.sql     # Database schema
+│   ├── events/              # Discord.js event handlers
+│   ├── handlers/            # Command and error handlers
+│   └── utils/               # Utility modules
+│       ├── apiClient.js     # FNBR.co API client
+│       ├── database.js      # Database connection
+│       ├── logger.js        # Winston logger
+│       ├── permissionManager.js
+│       ├── scheduler.js     # Cron job scheduler
+│       └── shopManager.js   # Shop display logic
+├── deploy-commands.js       # Slash command deployment
+├── package.json
+└── README.md
 ```
 
-## API Integration
+## 🎮 Usage
 
-This bot integrates with the [FNBR.co API](https://fnbr.co/api) to fetch:
-- Current item shop data
-- Item search results
-- Item images and metadata
+### Setting Up Daily Updates
 
-### Rate Limits
-- 600 requests per minute with API key
-- Intelligent caching reduces API usage
-- Automatic retry with exponential backoff
+1. Use `/setshopchannel #your-channel` to set up automatic daily shop updates
+2. Configure permissions with `/shopsettings trustedrole @role`
+3. Toggle updates on/off with `/shopsettings toggle true/false`
 
-## Database Schema
+### Viewing the Shop
 
-The bot maintains several tables for analytics:
-- `command_usage` - Track command executions
-- `shop_history` - Store daily shop data
-- `error_logs` - Comprehensive error logging
-- `user_interactions` - User behavior analytics
-- `api_requests` - API performance monitoring
-- `search_analytics` - Search query analysis
+- Use `/showcurrentitemshop` to display the current item shop
+- Navigate through different sections using the reaction buttons
+- Items are displayed with images, prices, and rarity information
 
-## Scheduled Tasks
+### Searching Items
 
-- **Daily Shop Posting**: 1:30 AM UTC+1 (2:30 AM CET)
-- **Cache Cleanup**: Every 6 hours
-- **Database Maintenance**: Sundays at 2:00 AM UTC
+- Use `/searchitem fortnite` to search for items containing "fortnite"
+- Search by rarity: `/searchitem legendary`
+- Search by type: `/searchitem pickaxe`
 
-## Error Handling
+## 🔍 Analytics & Monitoring
 
-- Multi-level error recovery
-- Automatic retries with exponential backoff
-- Graceful degradation to cached data
-- User-friendly error messages
-- Comprehensive error logging
-
-## Performance Optimization
-
-- **Memory Management**: Efficient cache cleanup
-- **API Optimization**: Smart caching with TTL
-- **Database**: Connection pooling and prepared statements
-- **Concurrency**: Limited concurrent API requests
-
-## Deployment (Cybrancee Hosting)
-
-1. **Upload files** to your Cybrancee server
-2. **Install dependencies**: `npm install --production`
-3. **Configure environment**: Set up `.env` file
-4. **Database setup**: Import `database.sql`
-5. **Process management**: Use PM2 or similar
-6. **Start bot**: `npm start`
-
-### PM2 Configuration
-```bash
-# Install PM2
-npm install -g pm2
-
-# Start bot with PM2
-pm2 start src/index.js --name "fortnite-shop-bot"
-
-# Save PM2 configuration
-pm2 save
-
-# Setup auto-restart
-pm2 startup
-```
-
-## Monitoring
-
-### Logs Location
-- `logs/combined.log` - All log levels
-- `logs/error.log` - Error logs only
-- `logs/api.log` - API request logs
-
-### Health Checks
-The bot includes comprehensive logging for monitoring:
-- Command execution times
+The bot tracks various metrics including:
+- Command usage statistics
 - API response times
-- Database query performance
+- Shop update history
 - Error rates and types
+- User engagement metrics
 
-## Troubleshooting
+View bot statistics with `/botstatus` (admin only).
+
+## 🛡️ Permission System
+
+- **Public Commands**: `showcurrentitemshop`, `searchitem`, `help`
+- **Admin Commands**: `setshopchannel`, `shopsettings`, `botstatus`
+- **Trusted Role**: Configurable role that can use shop commands even if not admin
+
+## 🐛 Troubleshooting
 
 ### Common Issues
 
-**Database Connection Failed**
-- Verify MySQL credentials in `.env`
-- Ensure database exists and schema is imported
-- Check network connectivity
+1. **Bot not responding to commands**
+   - Check if the bot has proper permissions in the channel
+   - Verify the bot token in `.env`
+   - Check the console for error messages
 
-**API Rate Limiting**
-- Verify FNBR.co API key is valid
-- Check API quota usage
-- Review caching configuration
+2. **Database connection errors**
+   - Verify database credentials in `.env`
+   - Ensure MySQL server is running
+   - Check if the database schema is properly imported
 
-**Permission Errors**
-- Verify bot has required Discord permissions
-- Check trusted role ID configuration
-- Ensure bot role is high enough in hierarchy
+3. **API errors**
+   - Verify your FNBR.co API key
+   - Check if you've exceeded API rate limits
+   - Monitor the logs for specific API error messages
 
-**Daily Shop Not Posting**
-- Check `SHOP_CHANNEL_ID` configuration
-- Verify bot permissions in target channel
-- Review scheduler logs for errors
+### Logs
 
-### Debug Mode
-Set `NODE_ENV=development` for verbose logging.
+The bot uses Winston for logging. Logs are output to the console and can be configured to write to files. Check the logs for detailed error information.
 
-## Contributing
+## 📊 Database Schema
+
+The bot creates several tables for data storage:
+- `command_usage` - Command execution tracking
+- `shop_history` - Historical shop data
+- `guild_configs` - Server-specific settings
+- `error_logs` - Error tracking
+- `api_requests` - API usage analytics
+
+## 🤝 Contributing
 
 1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests if applicable
+2. Create a feature branch: `git checkout -b feature-name`
+3. Make your changes and commit: `git commit -m 'Add feature'`
+4. Push to the branch: `git push origin feature-name`
 5. Submit a pull request
 
-## License
+## 🔗 Links
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+- [Discord Server](https://discord.gg/gMPavvZ53v)
+- [FNBR.co API Documentation](https://fnbr.co/api/docs)
+- [Fortnite API Documentation](https://dash.fortnite-api.com/)
+- [Discord Developer Portal](https://discord.com/developers/applications)
 
-## Credits
+## 📞 Support
 
-- **API**: [FNBR.co](https://fnbr.co) for Fortnite item data
-- **Author**: jdcomesta4
-- **Framework**: Discord.js v14
-
-## Support
-
-For support or questions:
-1. Check this README first
+If you encounter any issues or have questions:
+1. Check the troubleshooting section above
 2. Review the logs for error details
-3. Create an issue with relevant log information
+3. Open an issue on GitHub with relevant error messages and context
 
 ---
 
-**Note**: This bot requires valid FNBR.co API credentials. Please leave credit to fnbr.co when using their API as requested in their documentation.
+**Made with ❤️ by jdcomesta4**

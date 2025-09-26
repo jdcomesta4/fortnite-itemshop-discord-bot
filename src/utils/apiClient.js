@@ -193,13 +193,229 @@ class ApiClient {
 
     async searchItems(name, type = null, limit = 15) {
         try {
-            const params = { search: name, limit };
-            if (type) params.type = type;
+            const validTypes = ['outfit', 'backpack', 'pickaxe', 'glider', 'emote', 'wrap', 'loading', 'music', 'pet', 'spray', 'toy', 'banner', 'emoticon', 'contrail', 'lego-outfit', 'lego-kit'];
             
-            return await this.makeRequest('/images', params, true, 30 * 60 * 1000); // 30 minutes
+            const params = { search: name, limit };
+            // Only add type if it's valid
+            if (type && validTypes.includes(type.toLowerCase())) {
+                params.type = type.toLowerCase();
+            }
+            
+            // Get main data from fnbr.co
+            const searchResults = await this.makeRequest('/images', params, true, 30 * 60 * 1000); // 30 minutes
+            
+            // Enhance with last seen data from Fortnite-API.com
+            if (searchResults?.data && Array.isArray(searchResults.data)) {
+                searchResults.data = await this.enhanceWithLastSeenData(searchResults.data);
+            }
+            
+            return searchResults;
         } catch (error) {
             logger.error('Failed to search items:', error);
             throw new Error(`Failed to search items: ${error.message}`);
+        }
+    }
+
+    async enhanceWithLastSeenData(items) {
+        try {
+            const fortniteApiKey = process.env.FORTNITE_API_KEY;
+            if (!fortniteApiKey) {
+                logger.warn('No Fortnite-API key provided, skipping last seen enhancement');
+                return items;
+            }
+
+            const fortniteClient = axios.create({
+                baseURL: 'https://fortnite-api.com/v2',
+                timeout: 15000,
+                headers: { 
+                    'Authorization': fortniteApiKey,
+                    'User-Agent': 'Discord Bot - Fortnite Item Shop'
+                }
+            });
+
+            logger.debug(`Using Fortnite-API key: ${fortniteApiKey.substring(0, 8)}...`);
+
+            // Process items in batches to avoid overwhelming the API
+            const batchSize = 3;
+            const enhancedItems = [];
+
+            for (let i = 0; i < items.length; i += batchSize) {
+                const batch = items.slice(i, i + batchSize);
+                const batchPromises = batch.map(async (item) => {
+                    try {
+                        logger.debug(`Searching Fortnite-API for item: "${item.name}" ${item.id ? `(ID: ${item.id})` : ''}`);
+                        
+                        let response = null;
+                        
+                        // If we have an item ID, try using that first for more accurate results
+                        if (item.id) {
+                            try {
+                                response = await fortniteClient.get(`/cosmetics/br/${item.id}`);
+                                logger.debug(`Successfully fetched item by ID: ${item.id}`);
+                            } catch (idError) {
+                                logger.debug(`ID lookup failed for ${item.id}, falling back to name search`);
+                            }
+                        }
+                        
+                        // If ID lookup failed or no ID available, try name-based search
+                        if (!response) {
+                            try {
+                                response = await fortniteClient.get('/cosmetics/br/search/all', {
+                                    params: {
+                                        name: item.name,
+                                        matchMethod: 'full',
+                                        language: 'en'
+                                    }
+                                });
+                            } catch (searchError) {
+                                logger.debug(`Search endpoint failed for ${item.name}, trying cosmetics endpoint`);
+                                
+                                // Fall back to cosmetics endpoint if search fails
+                                try {
+                                    response = await fortniteClient.get('/cosmetics/br', {
+                                        params: {
+                                            name: item.name,
+                                            language: 'en'
+                                        }
+                                    });
+                                } catch (cosmeticsError) {
+                                    logger.debug(`All endpoints failed for ${item.name}`);
+                                    throw cosmeticsError;
+                                }
+                            }
+                        }
+
+                        logger.debug(`Fortnite-API response status: ${response.data?.status}`);
+
+                        if (response.data?.status === 200 && response.data?.data) {
+                            let match = null;
+                            
+                            // Handle single item response (from ID lookup)
+                            if (!Array.isArray(response.data.data)) {
+                                match = response.data.data;
+                                logger.debug(`Single item response for: ${match.name}`);
+                            } else if (response.data.data.length > 0) {
+                                // Handle array response (from search)
+                                logger.debug(`Array response with ${response.data.data.length} items: ${response.data.data.map(i => i.name).join(', ')}`);
+                                
+                                // Find the exact match by name (case insensitive)
+                                match = response.data.data.find(apiItem => 
+                                    apiItem.name.toLowerCase() === item.name.toLowerCase()
+                                );
+                            }
+
+                            if (match) {
+                                // Debug: Log all available fields in the match
+                                logger.debug(`Found exact match for "${item.name}". Available fields:`, Object.keys(match));
+                                logger.debug(`LastAppearance: ${match.lastAppearance}`);
+                                logger.debug(`ShopHistory: ${match.shopHistory ? 'Available' : 'Not available'}`);
+                                
+                                // Try different possible fields for last appearance
+                                let lastSeenDate = null;
+                                
+                                if (match.lastAppearance) {
+                                    lastSeenDate = new Date(match.lastAppearance * 1000).toISOString();
+                                    logger.info(`✅ Found lastAppearance for ${item.name}: ${match.lastAppearance}`);
+                                } else if (match.shopHistory && Array.isArray(match.shopHistory) && match.shopHistory.length > 0) {
+                                    // Get the most recent shop appearance
+                                    const mostRecent = match.shopHistory.sort((a, b) => new Date(b.date) - new Date(a.date))[0];
+                                    lastSeenDate = mostRecent.date;
+                                    logger.info(`✅ Found shop history for ${item.name}, most recent: ${lastSeenDate}`);
+                                } else if (match.added) {
+                                    // Fall back to added date if no shop history
+                                    lastSeenDate = match.added;
+                                    logger.info(`✅ Using added date for ${item.name}: ${lastSeenDate}`);
+                                } else {
+                                    // Try to get shop history from a separate endpoint
+                                    try {
+                                        const historyResponse = await fortniteClient.get(`/cosmetics/br/${match.id}/history`);
+                                        if (historyResponse.data?.status === 200 && historyResponse.data?.data?.history?.length > 0) {
+                                            const mostRecentHistory = historyResponse.data.data.history.sort((a, b) => new Date(b.date) - new Date(a.date))[0];
+                                            lastSeenDate = mostRecentHistory.date;
+                                            logger.info(`✅ Found separate history for ${item.name}, most recent: ${lastSeenDate}`);
+                                        }
+                                    } catch (historyError) {
+                                        logger.debug(`Could not fetch separate history for ${item.name}: ${historyError.message}`);
+                                    }
+                                }
+                                
+                                if (lastSeenDate) {
+                                    return {
+                                        ...item,
+                                        lastSeen: lastSeenDate
+                                    };
+                                } else {
+                                    logger.debug(`❌ No date information found for ${item.name}`);
+                                }
+                            } else {
+                                logger.debug(`❌ No exact match found for "${item.name}"`);
+                            }
+                        } else {
+                            logger.debug(`❌ No data or empty response for ${item.name}`);
+                        }
+                    } catch (error) {
+                        logger.error(`❌ Failed to get last seen for item ${item.name}: ${error.message}`);
+                        if (error.response) {
+                            logger.error(`Response status: ${error.response.status}, data: ${JSON.stringify(error.response.data)}`);
+                        }
+                    }
+                    return item; // Return original item if enhancement fails
+                });
+
+                const batchResults = await Promise.all(batchPromises);
+                enhancedItems.push(...batchResults);
+
+                // Small delay between batches to be respectful to the API
+                if (i + batchSize < items.length) {
+                    await new Promise(resolve => setTimeout(resolve, 300));
+                }
+            }
+
+            logger.debug(`Enhanced ${enhancedItems.length} items with last seen data`);
+            return enhancedItems;
+
+        } catch (error) {
+            logger.warn('Failed to enhance items with last seen data:', error.message);
+            return items; // Return original items if enhancement fails
+        }
+    }
+
+    async getItemLastSeen(itemName) {
+        try {
+            const fortniteApiKey = process.env.FORTNITE_API_KEY;
+            if (!fortniteApiKey) {
+                return null;
+            }
+
+            const fortniteClient = axios.create({
+                baseURL: 'https://fortnite-api.com/v2',
+                timeout: 10000,
+                headers: { 'Authorization': fortniteApiKey }
+            });
+
+            const response = await fortniteClient.get('/cosmetics/br/search/all', {
+                params: {
+                    name: itemName,
+                    matchMethod: 'full',
+                    language: 'en'
+                }
+            });
+
+            if (response.data?.status === 200 && response.data?.data && response.data.data.length > 0) {
+                // Find the exact match by name (case insensitive)
+                const match = response.data.data.find(apiItem => 
+                    apiItem.name.toLowerCase() === itemName.toLowerCase()
+                );
+
+                if (match && match.lastAppearance) {
+                    return new Date(match.lastAppearance * 1000).toISOString();
+                }
+            }
+
+            return null;
+        } catch (error) {
+            logger.debug(`Failed to get last seen for item ${itemName}: ${error.message}`);
+            return null;
         }
     }
 
@@ -255,10 +471,34 @@ class ApiClient {
             marvel: 0xED1C24,      // Marvel Red
             dc: 0x0078F0,          // DC Blue
             starwars: 0xFFE81F,    // Star Wars Yellow
-            icon: 0x00D4AA         // Icon Series Teal
+            icon: 0x2596BE,        // Icon Series - Updated color (#2596be)
+            'icon series': 0x2596BE, // Icon Series (spaced format)
+            icon_series: 0x2596BE  // Icon Series (underscore format)
         };
         
-        return colors[rarity?.toLowerCase()] || colors.common;
+        const normalizedRarity = rarity?.toLowerCase().replace(/_/g, ' ');
+        return colors[normalizedRarity] || colors[rarity?.toLowerCase()] || colors.common;
+    }
+
+    async checkItemInCurrentShop(itemId) {
+        try {
+            const shopData = await this.getShop();
+            if (!shopData?.data?.sections) return null;
+
+            for (const section of shopData.data.sections) {
+                if (section.items && section.items.includes(itemId)) {
+                    return {
+                        inShop: true,
+                        sectionName: section.displayName,
+                        shopDate: shopData.data.date
+                    };
+                }
+            }
+            return { inShop: false };
+        } catch (error) {
+            logger.error('Failed to check item in current shop:', error);
+            return null;
+        }
     }
 
     clearCache() {

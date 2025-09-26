@@ -105,25 +105,15 @@ async function handleButtonInteraction(interaction, client) {
 }
 
 async function checkPermissions(interaction) {
-    const trustedRoleId = process.env.TRUSTED_ROLE_ID;
+    // Admin commands (like setshopchannel, shopsettings) use Discord's built-in permission system
+    // Regular commands (like searchitem, showcurrentitemshop) can be used by everyone
+    const adminCommands = ['setshopchannel', 'shopsettings'];
     
-    if (!trustedRoleId) {
-        logger.warn('No trusted role ID configured, allowing all users');
+    if (adminCommands.includes(interaction.commandName)) {
+        // These commands already have permission checks built into their definitions
         return true;
     }
     
-    if (!interaction.guild) {
-        logger.warn('Command used outside of guild');
-        return false;
-    }
-    
-    const member = interaction.guild.members.cache.get(interaction.user.id) || 
-                  await interaction.guild.members.fetch(interaction.user.id).catch(() => null);
-    
-    if (!member) {
-        logger.warn(`Could not fetch member: ${interaction.user.id}`);
-        return false;
-    }
-    
-    return member.roles.cache.has(trustedRoleId) || member.permissions.has('Administrator');
+    // Allow all users to use regular bot commands
+    return true;
 }

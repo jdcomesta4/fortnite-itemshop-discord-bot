@@ -21,14 +21,30 @@ client.commands = new Collection();
 client.slashCommands = new Collection();
 
 // Global error handlers
-process.on('unhandledRejection', (reason, promise) => {
+process.on('unhandledRejection', async (reason, promise) => {
     logger.error('Unhandled Rejection at:', promise, 'reason:', reason);
-    errorHandler.logError('unhandledRejection', reason, { promise: promise.toString() });
+    
+    // Don't try to log database connection errors to prevent loops
+    if (reason && reason.code !== 'ECONNREFUSED' && !reason.message?.includes('Database not connected')) {
+        try {
+            await errorHandler.logError('unhandledRejection', reason, { promise: promise.toString() });
+        } catch (logError) {
+            logger.warn('Could not log unhandled rejection to database');
+        }
+    }
 });
 
-process.on('uncaughtException', (error) => {
+process.on('uncaughtException', async (error) => {
     logger.error('Uncaught Exception:', error);
-    errorHandler.logError('uncaughtException', error);
+    
+    // Don't try to log database connection errors to prevent loops
+    if (error.code !== 'ECONNREFUSED' && !error.message?.includes('Database not connected')) {
+        try {
+            await errorHandler.logError('uncaughtException', error);
+        } catch (logError) {
+            logger.warn('Could not log uncaught exception to database');
+        }
+    }
     process.exit(1);
 });
 
@@ -50,9 +66,14 @@ process.on('SIGTERM', async () => {
 // Initialize bot
 async function initialize() {
     try {
-        // Test database connection
-        await database.testConnection();
-        logger.info('Database connection established successfully');
+        // Try to establish database connection
+        try {
+            await database.testConnection();
+            logger.info('Database connection established successfully');
+        } catch (dbError) {
+            logger.warn('Database connection failed, bot will continue without database logging:', dbError.message);
+            // Don't exit, continue without database
+        }
 
         // Load commands and events
         await commandHandler.loadCommands(client);
@@ -66,7 +87,12 @@ async function initialize() {
         
     } catch (error) {
         logger.error('Failed to initialize bot:', error);
-        errorHandler.logError('initialization', error);
+        // Try to log the error, but don't fail if database is unavailable
+        try {
+            await errorHandler.logError('initialization', error);
+        } catch (logError) {
+            logger.warn('Could not log initialization error to database');
+        }
         process.exit(1);
     }
 }

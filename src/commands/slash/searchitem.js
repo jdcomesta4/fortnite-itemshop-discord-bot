@@ -1,5 +1,6 @@
 const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const apiClient = require('../../utils/apiClient');
+const permissionManager = require('../../utils/permissionManager');
 const database = require('../../utils/database');
 const logger = require('../../utils/logger');
 
@@ -40,6 +41,15 @@ module.exports = {
         const startTime = Date.now();
         
         try {
+            // Check permissions
+            const hasPermission = await permissionManager.canUseShopCommands(interaction.member, interaction.guildId);
+            if (!hasPermission) {
+                const guildConfig = await database.getGuildConfig(interaction.guildId);
+                const deniedEmbed = permissionManager.getPermissionDeniedEmbed(guildConfig?.trusted_role_id);
+                await interaction.reply({ embeds: [deniedEmbed], ephemeral: true });
+                return;
+            }
+
             await interaction.deferReply();
             
             const searchName = interaction.options.getString('name');
@@ -51,13 +61,18 @@ module.exports = {
             // Search for items
             const searchResults = await apiClient.searchItems(searchName, searchType, 15);
             
+            // Log API response for debugging
+            if (searchResults?.data && searchResults.data.length > 0) {
+                logger.debug(`Search API returned ${searchResults.data.length} results for "${searchName}"`);
+            }
+            
             if (!searchResults?.data || searchResults.data.length === 0) {
                 const noResultsEmbed = new EmbedBuilder()
                     .setTitle('🔍 Search Results')
                     .setDescription(`No items found matching **${searchName}**${searchType ? ` (${searchType})` : ''}${searchRarity ? ` (${searchRarity} rarity)` : ''}`)
                     .setColor(0xFF6B6B)
                     .setTimestamp()
-                    .setFooter({ text: 'Powered by fnbr.co' });
+                    .setFooter({ text: 'JD' });
                 
                 await interaction.editReply({ embeds: [noResultsEmbed] });
                 
@@ -81,7 +96,7 @@ module.exports = {
                     .setDescription(`No items found matching **${searchName}** with **${searchRarity}** rarity${searchType ? ` (${searchType})` : ''}`)
                     .setColor(0xFF6B6B)
                     .setTimestamp()
-                    .setFooter({ text: 'Powered by fnbr.co' });
+                    .setFooter({ text: 'JD' });
                 
                 await interaction.editReply({ embeds: [noResultsEmbed] });
                 
@@ -104,7 +119,7 @@ module.exports = {
                     ])
                     .setColor(0xFFB347)
                     .setTimestamp()
-                    .setFooter({ text: 'Powered by fnbr.co' });
+                    .setFooter({ text: 'JD' });
                 
                 await interaction.editReply({ embeds: [tooManyEmbed] });
                 
@@ -116,9 +131,10 @@ module.exports = {
             
             // Display results (1-5 items)
             if (filteredResults.length === 1) {
-                // Single item - detailed view
+                // Single item - detailed view with shop check
                 const item = filteredResults[0];
-                const embed = createDetailedItemEmbed(item);
+                const shopStatus = await apiClient.checkItemInCurrentShop(item.id);
+                const embed = await createDetailedItemEmbed(item, shopStatus);
                 await interaction.editReply({ embeds: [embed] });
             } else {
                 // Multiple items - create pagination
@@ -148,40 +164,231 @@ module.exports = {
     }
 };
 
-function createDetailedItemEmbed(item) {
+async function createDetailedItemEmbed(item, shopStatus = null) {
+    console.log('=== Creating embed for item ===');
+    console.log('Item name:', item.name);
+    console.log('Available fields:', Object.keys(item));
+    
     const embed = new EmbedBuilder()
         .setTitle(`🔍 ${item.name}`)
         .setColor(apiClient.getRarityColor(item.rarity))
-        .setThumbnail(item.images?.icon || null)
-        .addFields([
-            { name: '💎 Rarity', value: item.rarity?.charAt(0).toUpperCase() + item.rarity?.slice(1) || 'Unknown', inline: true },
-            { name: '🏷️ Type', value: item.readableType || item.type || 'Unknown', inline: true },
-            { name: '💰 Price', value: item.price ? `${item.price} V-Bucks` : 'Not Available', inline: true },
-            { name: '🆔 Item ID', value: `\`${item.id}\``, inline: true }
-        ])
         .setTimestamp()
-        .setFooter({ text: 'Powered by fnbr.co' });
+        .setFooter({ text: 'JD' });
     
+    // Description
     if (item.description) {
-        embed.setDescription(item.description);
+        embed.setDescription(`*${item.description}*`);
+        console.log('Added description:', item.description);
+    } else {
+        console.log('No description available');
+    }
+
+    // Start with basic fields
+    const fields = [];
+    
+    // Core information
+    fields.push(
+        { name: '💎 Rarity', value: item.rarity?.charAt(0).toUpperCase() + item.rarity?.slice(1) || 'Unknown', inline: true },
+        { name: '🏷️ Type', value: item.readableType || item.type || 'Unknown', inline: true }
+    );
+
+    // Price - check multiple possible fields
+    if (item.price) {
+        const priceText = item.priceIcon === 'vbucks' || !item.priceIcon ? 
+            `${item.price} V-Bucks` : 
+            `${item.price} ${item.priceIcon}`;
+        fields.push({ name: '💰 Price', value: priceText, inline: true });
+        console.log('Added price:', priceText);
+    } else {
+        fields.push({ name: '💰 Price', value: 'Not Available', inline: true });
+        console.log('No price available');
+    }
+
+    // Shop status
+    if (shopStatus) {
+        if (shopStatus.inShop) {
+            fields.push({ 
+                name: '🛍️ Shop Status', 
+                value: `✅ **Available Now!**\nIn section: ${shopStatus.sectionName}`, 
+                inline: false 
+            });
+        } else {
+            const lastSeenText = item.lastSeen ? formatDate(item.lastSeen) : 'Unknown';
+            fields.push({ 
+                name: '🛍️ Shop Status', 
+                value: `❌ **Not in today's shop**\nLast seen: ${lastSeenText}`, 
+                inline: false 
+            });
+        }
+    }
+
+    // Release information
+    if (item.introduction) {
+        fields.push({ name: '🆕 First Introduced', value: formatDate(item.introduction), inline: true });
+        console.log('Added introduction date:', item.introduction);
+    }
+
+    if (item.firstReleaseDate && item.firstReleaseDate !== item.introduction) {
+        fields.push({ name: '🚀 First Released', value: formatDate(item.firstReleaseDate), inline: true });
+    }
+
+    // Last seen (if not covered by shop status)
+    if (item.lastSeen && !shopStatus) {
+        fields.push({ name: '👁️ Last Seen', value: formatDate(item.lastSeen), inline: true });
+        console.log('Added last seen:', item.lastSeen);
+    }
+
+    // Set information
+    if (item.set) {
+        let setValue = '';
+        if (typeof item.set === 'string') {
+            setValue = item.set;
+        } else if (item.set.text) {
+            setValue = item.set.text;
+        } else if (item.set.backendValue) {
+            setValue = item.set.backendValue;
+        }
+        if (setValue) {
+            fields.push({ name: '📦 Set', value: setValue, inline: true });
+            console.log('Added set:', setValue);
+        }
+    }
+
+    // Series information
+    if (item.series) {
+        let seriesValue = '';
+        if (typeof item.series === 'string') {
+            seriesValue = item.series;
+        } else if (item.series.text) {
+            seriesValue = item.series.text;
+        } else if (item.series.backendValue) {
+            seriesValue = item.series.backendValue;
+        }
+        if (seriesValue) {
+            fields.push({ name: '📚 Series', value: seriesValue, inline: true });
+            console.log('Added series:', seriesValue);
+        }
+    }
+
+    // Built-in emote
+    if (item.builtInEmote) {
+        const emoteName = item.builtInEmote.name || 'Available';
+        fields.push({ name: '💃 Built-in Emote', value: emoteName, inline: true });
+        console.log('Added built-in emote:', emoteName);
+    }
+
+    // Variants
+    if (item.variants && Array.isArray(item.variants) && item.variants.length > 0) {
+        const variantCount = item.variants.length;
+        const channels = [...new Set(item.variants.map(v => v.channel || 'Style'))];
+        const variantText = channels.length > 1 ? 
+            `${variantCount} variants (${channels.slice(0, 2).join(', ')})` :
+            `${variantCount} ${channels[0] || 'variants'}`;
+        fields.push({ name: '🎨 Variants', value: variantText, inline: true });
+        console.log('Added variants:', variantText);
+    }
+
+    // Shop history
+    if (item.shopHistory && Array.isArray(item.shopHistory)) {
+        fields.push({ name: '📊 Shop Appearances', value: `${item.shopHistory.length} times`, inline: true });
+        console.log('Added shop history count:', item.shopHistory.length);
+    }
+
+    // LEGO compatibility
+    if (item.legoAssoc !== undefined) {
+        fields.push({ name: '🧱 LEGO Compatible', value: item.legoAssoc ? '✅ Yes' : '❌ No', inline: true });
+    }
+
+    // Special properties
+    if (item.reactive) {
+        fields.push({ name: '⚡ Reactive', value: '✅ Yes', inline: true });
+    }
+
+    if (item.traversal) {
+        fields.push({ name: '🏃 Traversal', value: '✅ Yes', inline: true });
+    }
+
+    // Gameplay tags (filtered and cleaned)
+    if (item.gameplayTags && Array.isArray(item.gameplayTags) && item.gameplayTags.length > 0) {
+        const filteredTags = item.gameplayTags
+            .filter(tag => {
+                const lowerTag = tag.toLowerCase();
+                return !lowerTag.includes('athena.') && 
+                       !lowerTag.includes('cosmetics.') &&
+                       !lowerTag.includes('frontend.') &&
+                       !lowerTag.includes('source.');
+            })
+            .map(tag => tag.replace(/^[A-Za-z]+\./, '').replace(/_/g, ' '))
+            .slice(0, 3);
+            
+        if (filteredTags.length > 0) {
+            fields.push({ name: '🏷️ Tags', value: filteredTags.join(', '), inline: false });
+            console.log('Added tags:', filteredTags.join(', '));
+        }
+    }
+
+    // Add all fields to embed
+    embed.addFields(fields);
+    
+    // Set main image - prioritize icon first, then featured, then gallery
+    if (item.images?.icon) {
+        embed.setImage(item.images.icon);
+        console.log('Added icon image as main image');
+    } else if (item.images?.featured) {
+        embed.setImage(item.images.featured);
+        console.log('Added featured image as main image');
+    } else if (item.images?.gallery) {
+        embed.setImage(item.images.gallery);
+        console.log('Added gallery image as main image');
     }
     
-    if (item.images?.featured) {
-        embed.setImage(item.images.featured);
-    }
+    console.log('Total fields added:', fields.length);
+    console.log('=== End embed creation ===');
     
     return embed;
+}
+
+function formatDate(dateString) {
+    if (!dateString) return 'Unknown';
+    try {
+        const date = new Date(dateString);
+        const now = new Date();
+        const diffTime = Math.abs(now - date);
+        const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+        
+        const formattedDate = date.toLocaleDateString('en-US', { 
+            year: 'numeric', 
+            month: 'long', 
+            day: 'numeric' 
+        });
+        
+        // Add relative time for recent dates
+        if (diffDays === 0) {
+            return `${formattedDate} (Today)`;
+        } else if (diffDays === 1) {
+            return `${formattedDate} (Yesterday)`;
+        } else if (diffDays < 7) {
+            return `${formattedDate} (${diffDays} days ago)`;
+        } else if (diffDays < 30) {
+            const weeks = Math.floor(diffDays / 7);
+            return `${formattedDate} (${weeks} week${weeks > 1 ? 's' : ''} ago)`;
+        }
+        
+        return formattedDate;
+    } catch (error) {
+        return 'Unknown';
+    }
 }
 
 async function displayMultipleItems(interaction, items, searchQuery) {
     const sessionId = `search_${interaction.user.id}_${Date.now()}`;
     let currentIndex = 0;
     
-    const createEmbed = (index) => {
+    const createEmbed = async (index) => {
         const item = items[index];
-        return createDetailedItemEmbed(item)
-            .setTitle(`🔍 Search Results for "${searchQuery}" (${index + 1}/${items.length})`)
-            .setDescription(item.description || `Showing result ${index + 1} of ${items.length}`);
+        const shopStatus = await apiClient.checkItemInCurrentShop(item.id);
+        const embed = await createDetailedItemEmbed(item, shopStatus);
+        return embed.setTitle(`🔍 Search Results for "${searchQuery}" (${index + 1}/${items.length})`);
     };
     
     const createButtons = (index) => {
@@ -231,7 +438,7 @@ async function displayMultipleItems(interaction, items, searchQuery) {
     };
     
     // Send initial message
-    const embed = createEmbed(currentIndex);
+    const embed = await createEmbed(currentIndex);
     const components = createButtons(currentIndex);
     
     await interaction.editReply({ embeds: [embed], components });
@@ -265,7 +472,7 @@ async function displayMultipleItems(interaction, items, searchQuery) {
                     return; // Do nothing for info button
             }
             
-            const newEmbed = createEmbed(currentIndex);
+            const newEmbed = await createEmbed(currentIndex);
             const newComponents = createButtons(currentIndex);
             
             await buttonInteraction.editReply({ embeds: [newEmbed], components: newComponents });

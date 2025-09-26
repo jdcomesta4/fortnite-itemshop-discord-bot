@@ -8,6 +8,8 @@ class ShopManager {
         this.currentShop = null;
         this.lastFetch = null;
         this.activeInteractions = new Map(); // Track active pagination sessions
+        this.maxSessions = 100; // Maximum number of active sessions
+        this.cleanupInterval = setInterval(() => this.cleanupExpiredSessions(), 5 * 60 * 1000); // Cleanup every 5 minutes
     }
 
     async fetchShopData(force = false) {
@@ -101,7 +103,7 @@ class ShopManager {
         }
     }
 
-    createShopEmbeds(shopData, currentSection = 0) {
+    createShopEmbeds(shopData, currentSection = 0, currentPage = 0) {
         const embeds = [];
         const section = shopData.sections[currentSection];
         
@@ -109,14 +111,28 @@ class ShopManager {
             return [this.createErrorEmbed('No shop section found')];
         }
 
+        // Calculate pagination for items in this section
+        const items = section.itemDetails || [];
+        const maxItemsPerPage = 6; // Adjust based on Discord's 10 embed limit minus header
+        const totalPages = Math.ceil(items.length / maxItemsPerPage);
+        const startIndex = currentPage * maxItemsPerPage;
+        const endIndex = Math.min(startIndex + maxItemsPerPage, items.length);
+        const itemsToShow = items.slice(startIndex, endIndex);
+
+        // Determine section display name with page number if needed
+        let sectionDisplayName = section.displayName;
+        if (totalPages > 1) {
+            sectionDisplayName += ` (Page ${currentPage + 1}/${totalPages})`;
+        }
+
         // Header embed
         const headerEmbed = new EmbedBuilder()
             .setTitle('🛍️ Fortnite Item Shop')
-            .setDescription(`**${section.displayName}**\nSection ${currentSection + 1} of ${shopData.sections.length}`)
+            .setDescription(`**${sectionDisplayName}**\nSection ${currentSection + 1} of ${shopData.sections.length}`)
             .setColor(0x00AE86)
             .setTimestamp()
             .setFooter({ 
-                text: 'Powered by fnbr.co', 
+                text: '', 
                 iconURL: 'https://fnbr.co/favicon.ico' 
             });
 
@@ -128,96 +144,165 @@ class ShopManager {
             ]);
         }
 
+        // Add section info
+        if (items.length > 0) {
+            headerEmbed.addFields([
+                { name: '🔢 Items in Section', value: `${items.length}`, inline: true },
+                { name: '📄 Showing Items', value: `${startIndex + 1}-${endIndex}`, inline: true }
+            ]);
+        }
+
         embeds.push(headerEmbed);
 
-        // Item embeds
-        const items = section.itemDetails || [];
-        const maxItemsPerPage = 6; // Adjust based on Discord's 10 embed limit
-        const itemsToShow = items.slice(0, maxItemsPerPage);
-
+        // Item embeds (only thumbnail, no large image, no description)
         for (const item of itemsToShow) {
             const itemEmbed = new EmbedBuilder()
                 .setTitle(item.name)
                 .setColor(apiClient.getRarityColor(item.rarity))
-                .setThumbnail(item.images?.icon || null)
+                .setThumbnail(item.images?.icon || null) // Only keep the small thumbnail
                 .addFields([
                     { name: '💎 Rarity', value: item.rarity?.charAt(0).toUpperCase() + item.rarity?.slice(1) || 'Unknown', inline: true },
                     { name: '🏷️ Type', value: item.readableType || item.type || 'Unknown', inline: true },
                     { name: '💰 Price', value: item.price ? `${item.price} V-Bucks` : 'Not Available', inline: true }
                 ]);
 
-            if (item.description) {
-                itemEmbed.setDescription(item.description);
-            }
-
-            if (item.images?.featured) {
-                itemEmbed.setImage(item.images.featured);
-            }
+            // Removed description and large image for shop display
 
             embeds.push(itemEmbed);
-        }
-
-        // Add info if there are more items
-        if (items.length > maxItemsPerPage) {
-            const remainingItems = items.length - maxItemsPerPage;
-            const infoEmbed = new EmbedBuilder()
-                .setColor(0xFFD700)
-                .setDescription(`📝 **Note:** ${remainingItems} more item(s) in this section not shown to stay within Discord limits.`);
-            embeds.push(infoEmbed);
         }
 
         return embeds;
     }
 
-    createNavigationButtons(currentSection, totalSections, sessionId) {
-        const row = new ActionRowBuilder();
+    createNavigationButtons(currentSection, totalSections, sessionId, currentPage = 0, totalPages = 1) {
+        const rows = [];
+        
+        // Section navigation row
+        const sectionRow = new ActionRowBuilder();
 
-        // First button
-        row.addComponents(
+        // First section button
+        sectionRow.addComponents(
             new ButtonBuilder()
-                .setCustomId(`shop_first_${sessionId}`)
-                .setLabel('⏮️ First')
+                .setCustomId(`shop_firstsec_${sessionId}`)
+                .setLabel('⏮️ First Sec')
                 .setStyle(ButtonStyle.Secondary)
                 .setDisabled(currentSection === 0)
         );
 
-        // Previous button  
-        row.addComponents(
+        // Previous section button  
+        sectionRow.addComponents(
             new ButtonBuilder()
-                .setCustomId(`shop_prev_${sessionId}`)
-                .setLabel('◀️ Previous')
+                .setCustomId(`shop_prevsec_${sessionId}`)
+                .setLabel('◀️ Prev Sec')
                 .setStyle(ButtonStyle.Primary)
                 .setDisabled(currentSection === 0)
         );
 
         // Section indicator
-        row.addComponents(
+        sectionRow.addComponents(
             new ButtonBuilder()
-                .setCustomId(`shop_info_${sessionId}`)
-                .setLabel(`${currentSection + 1}/${totalSections}`)
+                .setCustomId(`shop_secinfo_${sessionId}`)
+                .setLabel(`Sec ${currentSection + 1}/${totalSections}`)
                 .setStyle(ButtonStyle.Secondary)
                 .setDisabled(true)
         );
 
-        // Next button
-        row.addComponents(
+        // Next section button
+        sectionRow.addComponents(
             new ButtonBuilder()
-                .setCustomId(`shop_next_${sessionId}`)
-                .setLabel('Next ▶️')
+                .setCustomId(`shop_nextsec_${sessionId}`)
+                .setLabel('Next Sec ▶️')
                 .setStyle(ButtonStyle.Primary)
                 .setDisabled(currentSection >= totalSections - 1)
         );
 
-        // Last button
-        row.addComponents(
+        // Last section button
+        sectionRow.addComponents(
             new ButtonBuilder()
-                .setCustomId(`shop_last_${sessionId}`)
-                .setLabel('Last ⏭️')
+                .setCustomId(`shop_lastsec_${sessionId}`)
+                .setLabel('Last Sec ⏭️')
                 .setStyle(ButtonStyle.Secondary)
                 .setDisabled(currentSection >= totalSections - 1)
         );
 
-        return [row];
+        rows.push(sectionRow);
+
+        // Page navigation row (only if there are multiple pages in current section)
+        if (totalPages > 1) {
+            const pageRow = new ActionRowBuilder();
+
+            // First page button
+            pageRow.addComponents(
+                new ButtonBuilder()
+                    .setCustomId(`shop_firstpage_${sessionId}`)
+                    .setLabel('⏮️ First Page')
+                    .setStyle(ButtonStyle.Secondary)
+                    .setDisabled(currentPage === 0)
+            );
+
+            // Previous page button
+            pageRow.addComponents(
+                new ButtonBuilder()
+                    .setCustomId(`shop_prevpage_${sessionId}`)
+                    .setLabel('◀️ Prev Page')
+                    .setStyle(ButtonStyle.Success)
+                    .setDisabled(currentPage === 0)
+            );
+
+            // Page indicator
+            pageRow.addComponents(
+                new ButtonBuilder()
+                    .setCustomId(`shop_pageinfo_${sessionId}`)
+                    .setLabel(`Page ${currentPage + 1}/${totalPages}`)
+                    .setStyle(ButtonStyle.Secondary)
+                    .setDisabled(true)
+            );
+
+            // Next page button
+            pageRow.addComponents(
+                new ButtonBuilder()
+                    .setCustomId(`shop_nextpage_${sessionId}`)
+                    .setLabel('Next Page ▶️')
+                    .setStyle(ButtonStyle.Success)
+                    .setDisabled(currentPage >= totalPages - 1)
+            );
+
+            // Last page button
+            pageRow.addComponents(
+                new ButtonBuilder()
+                    .setCustomId(`shop_lastpage_${sessionId}`)
+                    .setLabel('Last Page ⏭️')
+                    .setStyle(ButtonStyle.Secondary)
+                    .setDisabled(currentPage >= totalPages - 1)
+            );
+
+            rows.push(pageRow);
+        }
+
+        return rows;
+    }
+
+    refreshSessionTimeout(sessionId) {
+        const sessionData = this.activeInteractions.get(sessionId);
+        if (sessionData) {
+            // Clear any existing timeout for this session
+            if (sessionData.timeoutId) {
+                clearTimeout(sessionData.timeoutId);
+            }
+            
+            // Set new timeout
+            const sessionTimeout = 30 * 60 * 1000; // 30 minutes
+            const timeoutId = setTimeout(() => {
+                this.activeInteractions.delete(sessionId);
+                logger.debug(`Cleaned up shop session after extended timeout: ${sessionId}`);
+            }, sessionTimeout);
+            
+            // Update session with new timeout ID
+            this.activeInteractions.set(sessionId, {
+                ...sessionData,
+                timeoutId
+            });
+        }
     }
 
     async handleButtonInteraction(interaction) {
@@ -229,45 +314,118 @@ class ShopManager {
             await interaction.deferUpdate();
 
             // Get session data
-            const sessionData = this.activeInteractions.get(sessionId);
+            let sessionData = this.activeInteractions.get(sessionId);
             if (!sessionData) {
-                await interaction.followUp({ 
-                    content: '❌ This shop session has expired. Please run the command again.', 
-                    ephemeral: true 
-                });
-                return true;
+                // Try to recreate session with current shop data
+                try {
+                    const shopData = await this.fetchShopData();
+                    if (shopData && shopData.sections && shopData.sections.length > 0) {
+                        // Recreate session with timeout
+                        const newSessionTimeout = 30 * 60 * 1000; // 30 minutes
+                        const timeoutId = setTimeout(() => {
+                            this.activeInteractions.delete(sessionId);
+                            logger.debug(`Cleaned up recreated shop session: ${sessionId}`);
+                        }, newSessionTimeout);
+                        
+                        sessionData = {
+                            userId: interaction.user.id,
+                            shopData,
+                            currentSection: 0,
+                            currentPage: 0,
+                            startTime: Date.now(),
+                            timeoutId
+                        };
+                        
+                        this.activeInteractions.set(sessionId, sessionData);
+                        
+                        // Log session refresh but don't show to user
+                        logger.debug(`Recreated expired session for user ${interaction.user.username}`);
+                    } else {
+                        await interaction.followUp({ 
+                            content: '❌ This shop session has expired and shop data is unavailable. Please run the command again.', 
+                            ephemeral: true 
+                        });
+                        return true;
+                    }
+                } catch (error) {
+                    logger.error('Failed to recreate expired session:', error);
+                    await interaction.followUp({ 
+                        content: '❌ This shop session has expired. Please run the command again.', 
+                        ephemeral: true 
+                    });
+                    return true;
+                }
             }
 
-            const { shopData, currentSection } = sessionData;
+            const { shopData, currentSection, currentPage = 0 } = sessionData;
             let newSection = currentSection;
+            let newPage = currentPage;
+
+            // Calculate total pages for current section
+            const currentSectionItems = shopData.sections[currentSection]?.itemDetails || [];
+            const maxItemsPerPage = 6;
+            const totalPages = Math.ceil(currentSectionItems.length / maxItemsPerPage);
 
             // Handle navigation
             switch (direction) {
-                case 'first':
+                case 'firstsec':
                     newSection = 0;
+                    newPage = 0;
                     break;
-                case 'prev':
+                case 'prevsec':
                     newSection = Math.max(0, currentSection - 1);
+                    newPage = 0;
                     break;
-                case 'next':
+                case 'nextsec':
                     newSection = Math.min(shopData.sections.length - 1, currentSection + 1);
+                    newPage = 0;
                     break;
-                case 'last':
+                case 'lastsec':
                     newSection = shopData.sections.length - 1;
+                    newPage = 0;
                     break;
-                case 'info':
-                    return true; // Do nothing for info button
+                case 'firstpage':
+                    newPage = 0;
+                    break;
+                case 'prevpage':
+                    newPage = Math.max(0, currentPage - 1);
+                    break;
+                case 'nextpage':
+                    newPage = Math.min(totalPages - 1, currentPage + 1);
+                    break;
+                case 'lastpage':
+                    newPage = totalPages - 1;
+                    break;
+                case 'secinfo':
+                case 'pageinfo':
+                    return true; // Do nothing for info buttons
             }
 
-            // Update session
-            this.activeInteractions.set(sessionId, {
+            // If section changed, reset page to 0
+            if (newSection !== currentSection) {
+                newPage = 0;
+            }
+
+            // Update session with refreshed timeout
+            const updatedSessionData = {
                 ...sessionData,
-                currentSection: newSection
-            });
+                currentSection: newSection,
+                currentPage: newPage,
+                lastInteraction: Date.now()
+            };
+            
+            this.activeInteractions.set(sessionId, updatedSessionData);
+            
+            // Extend session timeout for active users
+            this.refreshSessionTimeout(sessionId);
+
+            // Calculate new page data
+            const newSectionItems = shopData.sections[newSection]?.itemDetails || [];
+            const newTotalPages = Math.ceil(newSectionItems.length / maxItemsPerPage);
 
             // Create new embeds and buttons
-            const embeds = this.createShopEmbeds(shopData, newSection);
-            const components = this.createNavigationButtons(newSection, shopData.sections.length, sessionId);
+            const embeds = this.createShopEmbeds(shopData, newSection, newPage);
+            const components = this.createNavigationButtons(newSection, shopData.sections.length, sessionId, newPage, newTotalPages);
 
             await interaction.editReply({
                 embeds,
@@ -279,12 +437,12 @@ class ShopManager {
                 interaction.user.id,
                 interaction.user.username,
                 'button',
-                { action: 'shop_navigation', direction, section: newSection },
+                { action: 'shop_navigation', direction, section: newSection, page: newPage },
                 interaction.guildId,
                 sessionId
             );
 
-            logger.interaction(`User ${interaction.user.username} navigated to section ${newSection + 1}`);
+            logger.interaction(`User ${interaction.user.username} navigated to section ${newSection + 1}, page ${newPage + 1}`);
             return true;
 
         } catch (error) {
@@ -325,26 +483,36 @@ class ShopManager {
                 sectionIndex = 0;
             }
 
+            // Enforce session limits before creating new session
+            this.enforceSessionLimit();
+
             // Create session
             const sessionId = `${interaction.user.id}_${Date.now()}`;
-            const sessionTimeout = 15 * 60 * 1000; // 15 minutes
+            const sessionTimeout = 30 * 60 * 1000; // 30 minutes
+
+            // Auto-cleanup session
+            const timeoutId = setTimeout(() => {
+                this.activeInteractions.delete(sessionId);
+                logger.debug(`Cleaned up shop session: ${sessionId}`);
+            }, sessionTimeout);
 
             this.activeInteractions.set(sessionId, {
                 userId: interaction.user.id,
                 shopData,
                 currentSection: sectionIndex,
-                startTime: Date.now()
+                currentPage: 0,
+                startTime: Date.now(),
+                timeoutId
             });
 
-            // Auto-cleanup session
-            setTimeout(() => {
-                this.activeInteractions.delete(sessionId);
-                logger.debug(`Cleaned up shop session: ${sessionId}`);
-            }, sessionTimeout);
+            // Calculate pagination info for initial display
+            const sectionItems = shopData.sections[sectionIndex]?.itemDetails || [];
+            const maxItemsPerPage = 6;
+            const totalPages = Math.ceil(sectionItems.length / maxItemsPerPage);
 
             // Create embeds and buttons
-            const embeds = this.createShopEmbeds(shopData, sectionIndex);
-            const components = this.createNavigationButtons(sectionIndex, shopData.sections.length, sessionId);
+            const embeds = this.createShopEmbeds(shopData, sectionIndex, 0);
+            const components = this.createNavigationButtons(sectionIndex, shopData.sections.length, sessionId, 0, totalPages);
 
             await interaction.editReply({
                 content: '',
@@ -400,26 +568,22 @@ class ShopManager {
             .setDescription(message)
             .setColor(0xFF0000)
             .setTimestamp()
-            .setFooter({ text: 'Powered by fnbr.co' });
+            .setFooter({ text: 'JD' });
     }
 
     async postDailyShop(client) {
         try {
-            const channelId = process.env.SHOP_CHANNEL_ID;
-            if (!channelId) {
-                logger.warn('No shop channel ID configured for daily posting');
-                return;
-            }
-
-            const channel = await client.channels.fetch(channelId);
-            if (!channel) {
-                logger.error(`Could not find shop channel with ID: ${channelId}`);
-                return;
-            }
-
-            logger.shop('Starting daily shop post...');
+            logger.shop('Starting daily shop post across all configured guilds...');
             
-            // Fetch fresh shop data
+            // Get all guild configurations with shop channels
+            const guildConfigs = await database.getAllGuildConfigs();
+            
+            if (guildConfigs.length === 0) {
+                logger.warn('No guilds configured for daily shop posting');
+                return;
+            }
+
+            // Fetch fresh shop data once for all guilds
             const shopData = await this.fetchShopData(true);
             
             if (!shopData || !shopData.sections || shopData.sections.length === 0) {
@@ -427,26 +591,73 @@ class ShopManager {
                 return;
             }
 
-            // Create initial message
-            const embeds = this.createShopEmbeds(shopData, 0);
-            const sessionId = `daily_${Date.now()}`;
-            const components = this.createNavigationButtons(0, shopData.sections.length, sessionId);
+            // Calculate pagination info for initial display
+            const sectionItems = shopData.sections[0]?.itemDetails || [];
+            const maxItemsPerPage = 6;
+            const totalPages = Math.ceil(sectionItems.length / maxItemsPerPage);
 
-            // Create session for daily post
-            this.activeInteractions.set(sessionId, {
-                userId: 'system',
-                shopData,
-                currentSection: 0,
-                startTime: Date.now(),
-                isDailyPost: true
-            });
+            let successCount = 0;
+            let failureCount = 0;
 
-            // Send message
-            const message = await channel.send({
-                content: '🌅 **Daily Item Shop Update**',
-                embeds,
-                components
-            });
+            // Post to each configured guild
+            for (const config of guildConfigs) {
+                try {
+                    const channel = await client.channels.fetch(config.shop_channel_id);
+                    if (!channel) {
+                        logger.warn(`Could not find shop channel with ID: ${config.shop_channel_id} in guild ${config.guild_name}`);
+                        failureCount++;
+                        continue;
+                    }
+
+                    // Create initial message
+                    const embeds = this.createShopEmbeds(shopData, 0, 0);
+                    const sessionId = `daily_${config.guild_id}_${Date.now()}`;
+                    const components = this.createNavigationButtons(0, shopData.sections.length, sessionId, 0, totalPages);
+
+                    // Create session for daily post
+                    this.activeInteractions.set(sessionId, {
+                        userId: 'system',
+                        shopData,
+                        currentSection: 0,
+                        currentPage: 0,
+                        startTime: Date.now(),
+                        isDailyPost: true,
+                        guildId: config.guild_id
+                    });
+
+                    // Send message
+                    const message = await channel.send({
+                        content: '🌅 **Daily Item Shop Update**',
+                        embeds,
+                        components
+                    });
+
+                    logger.shop(`Daily shop posted successfully to ${channel.name} in ${config.guild_name}. Message ID: ${message.id}`);
+                    successCount++;
+
+                    // Small delay between posts to avoid rate limits
+                    await new Promise(resolve => setTimeout(resolve, 500));
+
+                } catch (error) {
+                    logger.error(`Failed to post daily shop to guild ${config.guild_name} (${config.guild_id}):`, error);
+                    failureCount++;
+                    
+                    await database.logError(
+                        'daily_shop_post_guild',
+                        error.message,
+                        error.stack,
+                        { 
+                            guildId: config.guild_id,
+                            guildName: config.guild_name,
+                            channelId: config.shop_channel_id
+                        },
+                        null,
+                        config.guild_id,
+                        null,
+                        'high'
+                    );
+                }
+            }
 
             // Update database to mark as posted
             await database.logShopHistory(
@@ -458,7 +669,7 @@ class ShopManager {
                 true
             );
 
-            logger.shop(`Daily shop posted successfully to ${channel.name}. Message ID: ${message.id}`);
+            logger.shop(`Daily shop posting completed. Success: ${successCount}, Failures: ${failureCount}, Total Guilds: ${guildConfigs.length}`);
 
         } catch (error) {
             logger.error('Failed to post daily shop:', error);
@@ -467,7 +678,7 @@ class ShopManager {
                 'daily_shop_post',
                 error.message,
                 error.stack,
-                { channelId: process.env.SHOP_CHANNEL_ID },
+                { totalGuilds: guildConfigs?.length || 0 },
                 null,
                 null,
                 null,
@@ -491,11 +702,63 @@ class ShopManager {
         };
     }
 
+    cleanupExpiredSessions() {
+        const now = Date.now();
+        let cleaned = 0;
+        
+        for (const [sessionId, sessionData] of this.activeInteractions.entries()) {
+            // Clean up sessions older than 45 minutes
+            if (now - sessionData.startTime > 45 * 60 * 1000) {
+                if (sessionData.timeoutId) {
+                    clearTimeout(sessionData.timeoutId);
+                }
+                this.activeInteractions.delete(sessionId);
+                cleaned++;
+            }
+        }
+        
+        if (cleaned > 0) {
+            logger.debug(`Cleaned up ${cleaned} expired shop sessions`);
+        }
+    }
+
+    enforceSessionLimit() {
+        if (this.activeInteractions.size >= this.maxSessions) {
+            // Remove oldest sessions
+            const sessions = Array.from(this.activeInteractions.entries())
+                .sort((a, b) => a[1].startTime - b[1].startTime);
+            
+            const toRemove = sessions.slice(0, sessions.length - this.maxSessions + 10);
+            
+            for (const [sessionId, sessionData] of toRemove) {
+                if (sessionData.timeoutId) {
+                    clearTimeout(sessionData.timeoutId);
+                }
+                this.activeInteractions.delete(sessionId);
+            }
+            
+            logger.debug(`Enforced session limit, removed ${toRemove.length} oldest sessions`);
+        }
+    }
+
     clearCache() {
+        // Clean up all active session timeouts
+        for (const [sessionId, sessionData] of this.activeInteractions.entries()) {
+            if (sessionData.timeoutId) {
+                clearTimeout(sessionData.timeoutId);
+            }
+        }
+        
         this.currentShop = null;
         this.lastFetch = null;
         this.activeInteractions.clear();
-        logger.shop('Shop cache cleared');
+        
+        // Clear cleanup interval
+        if (this.cleanupInterval) {
+            clearInterval(this.cleanupInterval);
+        }
+        
+        logger.shop('Shop cache and active sessions cleared');
     }
 }
 

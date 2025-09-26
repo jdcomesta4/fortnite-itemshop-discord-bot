@@ -1,4 +1,6 @@
 const shopManager = require('../../utils/shopManager');
+const permissionManager = require('../../utils/permissionManager');
+const database = require('../../utils/database');
 const logger = require('../../utils/logger');
 
 module.exports = {
@@ -8,6 +10,15 @@ module.exports = {
     
     async execute(message, args) {
         try {
+            // Check permissions
+            const hasPermission = await permissionManager.canUseShopCommands(message.member, message.guildId);
+            if (!hasPermission) {
+                const guildConfig = await database.getGuildConfig(message.guildId);
+                const deniedEmbed = permissionManager.getPermissionDeniedEmbed(guildConfig?.trusted_role_id);
+                await message.reply({ embeds: [deniedEmbed] });
+                return;
+            }
+
             // Create a fake interaction object for compatibility with shopManager
             const fakeInteraction = {
                 user: message.author,
