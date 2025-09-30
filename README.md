@@ -226,6 +226,29 @@ The bot creates several tables for data storage:
 - `error_logs` - Error tracking
 - `api_requests` - API usage analytics
 
+## 📊 Database Export
+
+Export your bot's database analytics and data to JSON format:
+
+```bash
+# Export with automatic timestamped filename
+node scripts/database-export.js
+
+# Export with custom filename
+node scripts/database-export.js my-backup.json
+
+# Using npm script
+npm run db-export
+```
+
+This creates a comprehensive JSON file in the `stats/` folder containing:
+- All database records (command usage, shop history, errors, etc.)
+- Performance analytics and statistics
+- Recent activity summaries
+- Error analysis for debugging
+
+Perfect for backing up data, analyzing bot performance, or troubleshooting issues.
+
 ## 🤝 Contributing
 
 1. Fork the repository
