@@ -442,8 +442,4 @@ If you find this bot useful:
 
 **Made with ❤️ by [jdcomesta4](https://github.com/jdcomesta4)**
 
-**Bot Version 2.0.0** • **Last Updated: October 2025**
-
-[⬆ Back to Top](#-fortnite-item-shop-discord-bot)
-
 </div>
