@@ -5,7 +5,6 @@ A comprehensive, production-ready Discord bot that displays the current Fortnite
 [![Discord.js](https://img.shields.io/badge/discord.js-v14.14.1-blue.svg)](https://discord.js.org/)
 [![Node.js](https://img.shields.io/badge/node.js-%3E%3D18.0.0-green.svg)](https://nodejs.org/)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Code Quality](https://img.shields.io/badge/code%20quality-A+-brightgreen.svg)]()
 
 ---
 
