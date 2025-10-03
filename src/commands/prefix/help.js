@@ -4,7 +4,7 @@ const logger = require('../../utils/logger');
 module.exports = {
     name: 'help',
     description: 'Display help information and available commands',
-    aliases: ['commands', 'info'],
+    aliases: ['commands', 'info', 'h'],
     
     async execute(message, args) {
         try {
@@ -13,7 +13,7 @@ module.exports = {
             
             const helpEmbed = new EmbedBuilder()
                 .setTitle('🤖 Fortnite Item Shop Bot - Help')
-                .setDescription('Here are all the available commands:')
+                .setDescription('A comprehensive bot for tracking the Fortnite item shop with wishlist features, daily updates, and advanced analytics.')
                 .setColor(0x00AE86)
                 .setThumbnail(message.client.user.displayAvatarURL())
                 .setTimestamp();
@@ -24,6 +24,11 @@ module.exports = {
                     name: '🛍️ Shop Commands',
                     value: `\`${prefix}showcurrentitemshop\` - Display the current Fortnite item shop\n\`${prefix}searchitem <name>\` - Search for specific items by name, type, or rarity`,
                     inline: false
+                },
+                {
+                    name: '⭐ Wishlist Commands',
+                    value: `\`${prefix}addtowishlist <name>\` - Add an item to your wishlist\n\`${prefix}mywishlist\` - View your personal wishlist\n\`${prefix}removefromwishlist <name>\` - Remove an item from your wishlist`,
+                    inline: false
                 }
             ]);
 
@@ -32,31 +37,34 @@ module.exports = {
                 helpEmbed.addFields([
                     {
                         name: '⚙️ Admin Commands',
-                        value: `\`${prefix}setshopchannel <#channel>\` - Set up daily shop updates\n\`${prefix}shopsettings\` - View current shop configuration\n\`${prefix}shopsettings toggle <true/false>\` - Toggle daily updates\n\`${prefix}shopsettings remove\` - Remove shop configuration`,
+                        value: `\`${prefix}setshopchannel <#channel>\` - Set up daily shop updates\n\`${prefix}setupdateschannel <#channel>\` - Set wishlist notification channel\n\`${prefix}shopsettings\` - View and manage shop configuration\n\`${prefix}botstatus\` - View bot statistics and system info`,
                         inline: false
                     }
                 ]);
             }
 
-            // Features
+            // Features & Aliases
             helpEmbed.addFields([
                 {
-                    name: '📋 Getting Started',
-                    value: isAdmin 
-                        ? `1. Use \`${prefix}setshopchannel #channel\` to set up daily updates\n2. Use \`${prefix}showcurrentitemshop\` to view the current shop\n3. Use \`${prefix}searchitem\` to find specific items`
-                        : `• Use \`${prefix}showcurrentitemshop\` to view the current shop\n• Use \`${prefix}searchitem\` to find specific items\n• Ask an administrator to set up daily updates`,
+                    name: '✨ Key Features',
+                    value: '• **Daily Shop Updates** at 1:30 AM UTC\n• **Wishlist Notifications** when items appear\n• **Interactive Navigation** with buttons\n• **Shop History** tracking\n• **Role-Based Access** control\n• **Multi-Guild Support**',
                     inline: false
                 },
                 {
                     name: '🔗 Command Aliases',
-                    value: `• \`${prefix}shop\`, \`${prefix}itemshop\` → showcurrentitemshop\n• \`${prefix}search\`, \`${prefix}item\` → searchitem\n• \`${prefix}setshop\`, \`${prefix}shopchannel\` → setshopchannel\n• \`${prefix}shopconfig\`, \`${prefix}shopcfg\` → shopsettings`,
+                    value: `• \`${prefix}shop\`, \`${prefix}itemshop\` → showcurrentitemshop\n• \`${prefix}search\`, \`${prefix}item\` → searchitem\n• \`${prefix}addwish\`, \`${prefix}wadd\` → addtowishlist\n• \`${prefix}wishlist\`, \`${prefix}wl\` → mywishlist\n• \`${prefix}removewish\`, \`${prefix}wremove\` → removefromwishlist\n• \`${prefix}setshop\` → setshopchannel`,
+                    inline: false
+                },
+                {
+                    name: '� Pro Tips',
+                    value: `• Try slash commands with \`/\` for better Discord integration\n• Use ➕ buttons in shop embeds to quickly add to wishlist\n• Navigate shop pages with ◀️ ▶️ buttons\n• Type \`${prefix}help\` anytime to see this message`,
                     inline: false
                 }
             ]);
 
             // Footer with additional info
             helpEmbed.setFooter({ 
-                text: `Daily updates: 1:30 AM UTC • Prefix: ${prefix}`,
+                text: `v2.0.0 • Prefix: ${prefix} • Also supports /slash commands`,
                 iconURL: 'https://fnbr.co/favicon.ico'
             });
 

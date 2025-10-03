@@ -1,12 +1,14 @@
 {
   "name": "fortnite-item-shop-bot",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "A comprehensive Discord bot for displaying Fortnite item shop data with advanced features",
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
     "dev": "nodemon src/index.js",
-    "test": "jest",
+    "dev-safe": "node start-bot-dev.js",
+    "test": "node test-bot.js",
+    "test-jest": "jest",
     "db-export": "node scripts/database-export.js"
   },
   "keywords": ["discord", "bot", "fortnite", "item-shop", "fnbr"],

@@ -22,11 +22,16 @@ const rest = new REST().setToken(process.env.DISCORD_TOKEN);
 
 (async () => {
     try {
+        if (!process.env.CLIENT_ID) {
+            console.error('❌ Error: CLIENT_ID environment variable is not set!');
+            process.exit(1);
+        }
+
         console.log(`🔄 Started refreshing ${commands.length} application (/) commands.`);
 
         // Deploy commands globally
         const data = await rest.put(
-            Routes.applicationCommands(process.env.CLIENT_ID || '1299147355282477148'),
+            Routes.applicationCommands(process.env.CLIENT_ID),
             { body: commands },
         );
 

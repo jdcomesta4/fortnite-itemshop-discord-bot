@@ -113,3 +113,38 @@ CREATE TABLE IF NOT EXISTS guild_configs (
     INDEX idx_shop_channel_id (shop_channel_id),
     INDEX idx_configured_at (configured_at)
 );
+
+-- User wishlists
+CREATE TABLE IF NOT EXISTS user_wishlists (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id VARCHAR(20) NOT NULL,
+    item_name VARCHAR(200) NOT NULL,
+    item_type VARCHAR(100),
+    item_rarity VARCHAR(50),
+    item_icon_url TEXT,
+    item_price INT,
+    date_added DATETIME DEFAULT CURRENT_TIMESTAMP,
+    last_notified DATE DEFAULT NULL,
+    INDEX idx_user_id (user_id),
+    INDEX idx_item_name (item_name),
+    INDEX idx_date_added (date_added),
+    UNIQUE KEY unique_user_item (user_id, item_name)
+);
+
+-- Wishlist notification configuration
+CREATE TABLE IF NOT EXISTS wishlist_notifications_config (
+    guild_id VARCHAR(20) PRIMARY KEY,
+    updates_channel_id VARCHAR(20) NOT NULL,
+    notifications_enabled BOOLEAN DEFAULT TRUE,
+    configured_by VARCHAR(20),
+    configured_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    last_updated DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_updates_channel_id (updates_channel_id)
+);
+
+-- User notification preferences
+CREATE TABLE IF NOT EXISTS user_notification_preferences (
+    user_id VARCHAR(20) PRIMARY KEY,
+    wishlist_notifications_enabled BOOLEAN DEFAULT TRUE,
+    last_updated DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);

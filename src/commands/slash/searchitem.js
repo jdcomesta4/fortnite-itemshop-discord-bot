@@ -3,6 +3,7 @@ const apiClient = require('../../utils/apiClient');
 const permissionManager = require('../../utils/permissionManager');
 const database = require('../../utils/database');
 const logger = require('../../utils/logger');
+const { createWishlistConfirmationEmbed } = require('../../utils/wishlistEmbeds');
 
 const itemTypes = [
     'outfit', 'backpack', 'pickaxe', 'glider', 'emote', 'wrap', 'loading', 'music',
@@ -135,7 +136,91 @@ module.exports = {
                 const item = filteredResults[0];
                 const shopStatus = await apiClient.checkItemInCurrentShop(item.id);
                 const embed = await createDetailedItemEmbed(item, shopStatus);
-                await interaction.editReply({ embeds: [embed] });
+                
+                // Add wishlist button
+                const wishlistRow = new ActionRowBuilder()
+                    .addComponents(
+                        new ButtonBuilder()
+                            .setCustomId(`search_wishlist_add_${interaction.user.id}_${Buffer.from(item.name).toString('base64')}`)
+                            .setLabel('➕ Add to Wishlist')
+                            .setStyle(ButtonStyle.Success)
+                    );
+                
+                await interaction.editReply({ embeds: [embed], components: [wishlistRow] });
+                
+                // Create collector for wishlist button
+                const singleCollector = interaction.channel.createMessageComponentCollector({
+                    filter: i => i.customId.includes(`search_wishlist_add_${interaction.user.id}`) && i.user.id === interaction.user.id,
+                    time: 300000 // 5 minutes
+                });
+                
+                singleCollector.on('collect', async (buttonInteraction) => {
+                    try {
+                        await buttonInteraction.deferReply({ ephemeral: true });
+                        
+                        const existingItem = await database.checkWishlistItem(buttonInteraction.user.id, item.name);
+                        if (existingItem) {
+                            await buttonInteraction.followUp({
+                                content: `⚠️ **${item.name}** is already in your wishlist!`,
+                                ephemeral: true
+                            });
+                            return;
+                        }
+
+                        const itemData = {
+                            name: item.name,
+                            type: item.readableType || item.type || 'Unknown',
+                            rarity: item.rarity?.displayValue || item.rarity || 'Unknown',
+                            icon_url: item.images?.icon || null,
+                            price: typeof item.price === 'string'
+                                ? parseInt(item.price.replace(/[^0-9]/g, ''), 10) || 0
+                                : Number(item.price) || 0
+                        };
+
+                        const added = await database.addToWishlist(buttonInteraction.user.id, itemData);
+                        
+                        if (added) {
+                            const confirmationEmbed = createWishlistConfirmationEmbed(itemData, {
+                                viewCommand: '/mywishlist'
+                            });
+
+                            await buttonInteraction.followUp({
+                                embeds: [confirmationEmbed],
+                                ephemeral: true
+                            });
+                            
+                            // Log the action
+                            await database.logUserInteraction(
+                                buttonInteraction.user.id,
+                                buttonInteraction.user.username,
+                                'wishlist_add',
+                                { itemName: item.name, source: 'single_search_result' },
+                                buttonInteraction.guildId
+                            );
+                        } else {
+                            await buttonInteraction.followUp({
+                                content: `❌ Failed to add **${item.name}** to your wishlist. Please try again later.`,
+                                ephemeral: true
+                            });
+                        }
+                    } catch (error) {
+                        logger.error('Error adding item to wishlist from single search:', error);
+                        await buttonInteraction.followUp({
+                            content: `❌ An error occurred while adding **${item.name}** to your wishlist. Please try again later.`,
+                            ephemeral: true
+                        });
+                    }
+                });
+                
+                singleCollector.on('end', async () => {
+                    try {
+                        // Disable wishlist button when collector expires
+                        wishlistRow.components[0].setDisabled(true);
+                        await interaction.editReply({ components: [wishlistRow] });
+                    } catch (error) {
+                        logger.debug('Could not disable wishlist button after timeout:', error.message);
+                    }
+                });
             } else {
                 // Multiple items - create pagination
                 await displayMultipleItems(interaction, filteredResults, searchName);
@@ -235,7 +320,6 @@ async function createDetailedItemEmbed(item, shopStatus = null) {
     // Last seen (if not covered by shop status)
     if (item.lastSeen && !shopStatus) {
         fields.push({ name: '👁️ Last Seen', value: formatDate(item.lastSeen), inline: true });
-        console.log('Added last seen:', item.lastSeen);
     }
 
     // Set information
@@ -406,7 +490,7 @@ async function displayMultipleItems(interaction, items, searchQuery) {
             new ButtonBuilder()
                 .setCustomId(`search_prev_${sessionId}`)
                 .setLabel('◀️ Previous')
-                .setStyle(ButtonStyle.Primary)
+                .setStyle(ButtonStyle.Success)
                 .setDisabled(index === 0)
         );
         
@@ -422,7 +506,7 @@ async function displayMultipleItems(interaction, items, searchQuery) {
             new ButtonBuilder()
                 .setCustomId(`search_next_${sessionId}`)
                 .setLabel('Next ▶️')
-                .setStyle(ButtonStyle.Primary)
+                .setStyle(ButtonStyle.Success)
                 .setDisabled(index >= items.length - 1)
         );
         
@@ -434,7 +518,16 @@ async function displayMultipleItems(interaction, items, searchQuery) {
                 .setDisabled(index >= items.length - 1)
         );
         
-        return [row];
+        // Add wishlist button row
+        const wishlistRow = new ActionRowBuilder()
+            .addComponents(
+                new ButtonBuilder()
+                    .setCustomId(`search_wishlist_add_${sessionId}_${Buffer.from(items[index].name).toString('base64')}`)
+                    .setLabel('➕ Add to Wishlist')
+                    .setStyle(ButtonStyle.Success)
+            );
+        
+        return [row, wishlistRow];
     };
     
     // Send initial message
@@ -451,9 +544,19 @@ async function displayMultipleItems(interaction, items, searchQuery) {
     
     collector.on('collect', async (buttonInteraction) => {
         try {
-            await buttonInteraction.deferUpdate();
+            const customIdParts = buttonInteraction.customId.split('_');
+            const [action, direction] = customIdParts;
             
-            const [action, direction] = buttonInteraction.customId.split('_');
+            // Handle wishlist additions
+            if (direction === 'wishlist' && customIdParts[2] === 'add') {
+                // Let the wishlistManager handle this button instead
+                return;
+                
+                // The wishlistManager will handle this button interaction
+            }
+            
+            // Handle navigation buttons
+            await buttonInteraction.deferUpdate();
             
             switch (direction) {
                 case 'first':

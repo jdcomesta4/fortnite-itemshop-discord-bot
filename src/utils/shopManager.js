@@ -174,8 +174,45 @@ class ShopManager {
         return embeds;
     }
 
-    createNavigationButtons(currentSection, totalSections, sessionId, currentPage = 0, totalPages = 1) {
+    createNavigationButtons(currentSection, totalSections, sessionId, currentPage = 0, totalPages = 1, items = []) {
         const rows = [];
+        
+        // Wishlist buttons row(s) - up to 5 items per row, max 2 rows
+        if (items && items.length > 0) {
+            const itemsToShow = items.slice(0, 10); // Max 10 items (2 rows of 5)
+            let currentRow = new ActionRowBuilder();
+            let buttonsInRow = 0;
+            
+            for (const item of itemsToShow) {
+                if (buttonsInRow === 5) {
+                    rows.push(currentRow);
+                    currentRow = new ActionRowBuilder();
+                    buttonsInRow = 0;
+                }
+                
+                // Create shortened custom ID to avoid 100 char limit
+                const itemIdHash = item.id ? item.id.substring(item.id.length - 8) : Math.random().toString(36).substring(7);
+                const itemNameB64 = Buffer.from(item.name).toString('base64');
+                const shortCustomId = `shop_wl_${sessionId}_${itemIdHash}_${itemNameB64}`.substring(0, 99);
+                
+                // Shorten label if needed (max 80 chars)
+                const itemLabel = item.name.length > 20 ? item.name.substring(0, 17) + '...' : item.name;
+                
+                currentRow.addComponents(
+                    new ButtonBuilder()
+                        .setCustomId(shortCustomId)
+                        .setLabel(`➕ ${itemLabel}`)
+                        .setStyle(ButtonStyle.Success)
+                );
+                
+                buttonsInRow++;
+            }
+            
+            // Add the last row if it has buttons
+            if (buttonsInRow > 0) {
+                rows.push(currentRow);
+            }
+        }
         
         // Section navigation row
         const sectionRow = new ActionRowBuilder();
@@ -425,7 +462,10 @@ class ShopManager {
 
             // Create new embeds and buttons
             const embeds = this.createShopEmbeds(shopData, newSection, newPage);
-            const components = this.createNavigationButtons(newSection, shopData.sections.length, sessionId, newPage, newTotalPages);
+            const startIndex = newPage * maxItemsPerPage;
+            const endIndex = Math.min(startIndex + maxItemsPerPage, newSectionItems.length);
+            const itemsToShow = newSectionItems.slice(startIndex, endIndex);
+            const components = this.createNavigationButtons(newSection, shopData.sections.length, sessionId, newPage, newTotalPages, itemsToShow);
 
             await interaction.editReply({
                 embeds,
@@ -512,7 +552,10 @@ class ShopManager {
 
             // Create embeds and buttons
             const embeds = this.createShopEmbeds(shopData, sectionIndex, 0);
-            const components = this.createNavigationButtons(sectionIndex, shopData.sections.length, sessionId, 0, totalPages);
+            const startIndex = 0;
+            const endIndex = Math.min(maxItemsPerPage, sectionItems.length);
+            const itemsToShow = sectionItems.slice(startIndex, endIndex);
+            const components = this.createNavigationButtons(sectionIndex, shopData.sections.length, sessionId, 0, totalPages, itemsToShow);
 
             await interaction.editReply({
                 content: '',
@@ -612,7 +655,10 @@ class ShopManager {
                     // Create initial message
                     const embeds = this.createShopEmbeds(shopData, 0, 0);
                     const sessionId = `daily_${config.guild_id}_${Date.now()}`;
-                    const components = this.createNavigationButtons(0, shopData.sections.length, sessionId, 0, totalPages);
+                    const startIndex = 0;
+                    const endIndex = Math.min(maxItemsPerPage, sectionItems.length);
+                    const itemsToShow = sectionItems.slice(startIndex, endIndex);
+                    const components = this.createNavigationButtons(0, shopData.sections.length, sessionId, 0, totalPages, itemsToShow);
 
                     // Create session for daily post
                     this.activeInteractions.set(sessionId, {
@@ -709,6 +755,7 @@ class ShopManager {
         for (const [sessionId, sessionData] of this.activeInteractions.entries()) {
             // Clean up sessions older than 45 minutes
             if (now - sessionData.startTime > 45 * 60 * 1000) {
+                // Properly clear timeout before deleting session
                 if (sessionData.timeoutId) {
                     clearTimeout(sessionData.timeoutId);
                 }
@@ -718,7 +765,7 @@ class ShopManager {
         }
         
         if (cleaned > 0) {
-            logger.debug(`Cleaned up ${cleaned} expired shop sessions`);
+            logger.debug(`Cleaned up ${cleaned} expired shop sessions (with ${cleaned} timeouts cleared)`);
         }
     }
 
@@ -731,21 +778,24 @@ class ShopManager {
             const toRemove = sessions.slice(0, sessions.length - this.maxSessions + 10);
             
             for (const [sessionId, sessionData] of toRemove) {
+                // Properly clear timeout before deleting session
                 if (sessionData.timeoutId) {
                     clearTimeout(sessionData.timeoutId);
                 }
                 this.activeInteractions.delete(sessionId);
             }
             
-            logger.debug(`Enforced session limit, removed ${toRemove.length} oldest sessions`);
+            logger.debug(`Enforced session limit, removed ${toRemove.length} oldest sessions (with timeouts cleared)`);
         }
     }
 
     clearCache() {
         // Clean up all active session timeouts
+        let clearedTimeouts = 0;
         for (const [sessionId, sessionData] of this.activeInteractions.entries()) {
             if (sessionData.timeoutId) {
                 clearTimeout(sessionData.timeoutId);
+                clearedTimeouts++;
             }
         }
         
@@ -758,7 +808,7 @@ class ShopManager {
             clearInterval(this.cleanupInterval);
         }
         
-        logger.shop('Shop cache and active sessions cleared');
+        logger.shop(`Shop cache and active sessions cleared (${clearedTimeouts} timeouts cleared)`);
     }
 }
 

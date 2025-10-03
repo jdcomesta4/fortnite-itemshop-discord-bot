@@ -1,6 +1,7 @@
 const cron = require('node-cron');
 const logger = require('./logger');
 const shopManager = require('./shopManager');
+const wishlistNotifier = require('./wishlistNotifier');
 const errorHandler = require('../handlers/errorHandler');
 
 class Scheduler {
@@ -68,9 +69,37 @@ class Scheduler {
             
             const startTime = Date.now();
             await shopManager.postDailyShop(client);
-            const executionTime = Date.now() - startTime;
+            const shopPostTime = Date.now() - startTime;
             
-            logger.shop(`Daily shop post completed in ${executionTime}ms`);
+            logger.shop(`Daily shop post completed in ${shopPostTime}ms`);
+            
+            // Process wishlist notifications after shop posting
+            try {
+                logger.shop('Processing wishlist notifications...');
+                const notificationStartTime = Date.now();
+                
+                // Get current shop data
+                const shopData = await shopManager.fetchShopData(false); // Use cached data
+                await wishlistNotifier.processShopNotifications(shopData, client);
+                
+                const notificationTime = Date.now() - notificationStartTime;
+                logger.shop(`Wishlist notifications processed in ${notificationTime}ms`);
+            } catch (notificationError) {
+                logger.error('Wishlist notification processing failed:', notificationError);
+                
+                await errorHandler.logError(
+                    'wishlist_notification_error',
+                    notificationError,
+                    { 
+                        scheduledTime: new Date().toISOString(),
+                        shopPostSuccessful: true
+                    },
+                    null,
+                    null,
+                    null,
+                    'high'
+                );
+            }
             
         } catch (error) {
             logger.error('Daily shop post failed:', error);
@@ -94,6 +123,16 @@ class Scheduler {
                     logger.shop('Retrying daily shop post after failure...');
                     await shopManager.postDailyShop(client);
                     logger.shop('Daily shop post retry successful');
+                    
+                    // Also retry wishlist notifications
+                    try {
+                        logger.shop('Processing wishlist notifications after retry...');
+                        const shopData = await shopManager.fetchShopData(false);
+                        await wishlistNotifier.processShopNotifications(shopData, client);
+                        logger.shop('Wishlist notifications processed after retry');
+                    } catch (notificationRetryError) {
+                        logger.error('Wishlist notification retry failed:', notificationRetryError);
+                    }
                 } catch (retryError) {
                     logger.error('Daily shop post retry failed:', retryError);
                     
@@ -220,22 +259,6 @@ class Scheduler {
             };
         }
         return status;
-    }
-
-    // Test methods for development
-    async testDailyShop(client) {
-        logger.info('Testing daily shop post manually...');
-        await this.handleDailyShopPost(client);
-    }
-
-    async testCacheCleanup() {
-        logger.info('Testing cache cleanup manually...');
-        await this.handleCacheCleanup();
-    }
-
-    async testDatabaseMaintenance() {
-        logger.info('Testing database maintenance manually...');
-        await this.handleDatabaseMaintenance();
     }
 
     destroy() {

@@ -15,6 +15,9 @@ module.exports = {
             // Check if message starts with prefix
             if (!message.content.startsWith(prefix)) return;
             
+            // Log command attempts only
+            console.log(`📨 Processing command: "${message.content}" from ${message.author.username} (ID: ${message.id})`);
+            
             // Parse command and arguments
             const args = message.content.slice(prefix.length).trim().split(/ +/);
             const commandName = args.shift()?.toLowerCase();

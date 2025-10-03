@@ -1,6 +1,7 @@
 require('dotenv').config();
 const { Client, GatewayIntentBits, Collection } = require('discord.js');
 const logger = require('./utils/logger');
+const envValidator = require('./utils/envValidator');
 const commandHandler = require('./handlers/commandHandler');
 const eventHandler = require('./handlers/eventHandler');
 const errorHandler = require('./handlers/errorHandler');
@@ -66,6 +67,13 @@ process.on('SIGTERM', async () => {
 // Initialize bot
 async function initialize() {
     try {
+        // Validate environment variables first
+        const validationPassed = envValidator.validate();
+        if (!validationPassed) {
+            logger.error('Environment validation failed. Please check your .env file and ensure all required variables are set.');
+            process.exit(1);
+        }
+
         // Try to establish database connection
         try {
             await database.testConnection();
